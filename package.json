@@ -4,7 +4,8 @@
   "version": "1.0.0",
   "description": "Self-hosted digital library manager",
   "scripts": {
-    "build": "turbo build"
+    "build": "turbo build",
+    "dev": "turbo dev"
   },
   "keywords": [],
   "author": "",
