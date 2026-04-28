@@ -7,11 +7,12 @@ export interface File {
 
 export interface Book {
   id: string;
-  name: string;
+  title: string;
   author: string;
   dateAdded: Date;
-  datePublished?: Date;
+  yearPublished?: Date;
   coverImageUrl?: URL;
+  file: File;
 }
 
 export interface BookFile {
