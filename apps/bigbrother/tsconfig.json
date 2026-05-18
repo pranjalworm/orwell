@@ -37,4 +37,5 @@
     "moduleDetection": "force",
     "skipLibCheck": true,
   },
+  "exclude": ["dist", "tsup.config.ts"],
 }
