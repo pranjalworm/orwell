@@ -6,7 +6,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 **Orwell** is a personal book management system — a self-hosted "Goodreads". It is a pnpm + Turborepo monorepo with two apps and one shared package:
 
-- `apps/bigbrother` — NestJS backend API (currently being migrated from Express; see below)
+- `apps/bigbrother` — NestJS backend API
 - `apps/doublethink` — React 19 + Vite frontend
 - `packages/shared` — TypeScript interfaces consumed directly from source (no build step)
 
@@ -41,23 +41,19 @@ docker-compose up -d
 
 ### Backend — `apps/bigbrother`
 
-NestJS 11 on TypeScript. Entry point is `src/main.ts`. The root module is `AppModule` in `src/app.module.ts`.
+NestJS 11 on TypeScript. Entry point is `src/main.ts` (sets `/api` global prefix, CORS, and a global `ValidationPipe`). The root module is `AppModule` in `src/app.module.ts`, which imports `ConfigModule` (global), `PrismaModule` (global), and `BooksModule`.
 
-**Active migration**: the branch `migrate-to-nestjs` is porting the full Express implementation (preserved in `apps/bigbrother-temp/`) into NestJS modules. When adding features, follow NestJS conventions (modules, controllers, services) and look at `apps/bigbrother-temp/` for the existing business logic to port:
-
-- `src/db/` — PostgreSQL pool, schema SQL, and query helpers per entity
-- `src/services/Ingestion.service.ts` — book ingestion pipeline
-- `src/controller/books.controller.ts` — books REST endpoints
-- `src/routes/` — Express router definitions
+Feature layout:
+- `src/prisma/` — `PrismaService` (extends `PrismaClient`, manages connect/disconnect) wrapped in a `@Global()` `PrismaModule`.
+- `src/books/` — `BooksController` (`GET /api/books`, `POST /api/book`), `BooksService` (uses `prisma.$transaction` for atomic book/file/book_files ingestion), `CreateBookDto` (class-validator), and a `MulterModule.registerAsync` setup for disk uploads to `BOOKS_PATH`.
+- `prisma/schema.prisma` — Book, File, BookFile models. Migrations live in `prisma/migrations/`; the initial migration was baselined against the existing database with `prisma migrate resolve --applied 0_init`.
 
 **Environment** (`apps/bigbrother/.env`, gitignored):
 - `DATABASE_URL` — PostgreSQL connection string
 - `PORT` — defaults to 3000
 - `BOOKS_PATH` — path to book asset files (default `./assets/books`)
 
-**Database**: PostgreSQL 17. Credentials: `orwell`/`orwell`, db `orwell`, port 5432. Start with `docker-compose up -d`.
-
-**TypeScript strictness**: `noUnusedLocals`, `noUnusedParameters`, `exactOptionalPropertyTypes`, `noUncheckedIndexedAccess` are all enabled. All packages use `"type": "module"` — use `.js` extensions in relative imports.
+**Database**: PostgreSQL 17. Credentials: `orwell`/`orwell`, db `orwell`, port 5432. Start with `docker-compose up -d`. Schema changes go through `pnpm --filter bigbrother db:migrate`.
 
 ### Frontend — `apps/doublethink`
 

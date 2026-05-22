@@ -1,0 +1,40 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model Book {
+  id             String     @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  title          String
+  author         String?
+  dateAdded      DateTime   @default(now()) @map("date_added") @db.Timestamptz(6)
+  yearPublished  Int?       @map("year_published")
+  coverImageUrl  String?    @map("cover_image_url")
+  bookFiles      BookFile[]
+
+  @@map("books")
+}
+
+model File {
+  id        String     @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  name      String
+  filePath  String     @map("file_path")
+  fileType  String     @map("file_type")
+  bookFiles BookFile[]
+
+  @@map("files")
+}
+
+model BookFile {
+  bookId String @map("book_id") @db.Uuid
+  fileId String @map("file_id") @db.Uuid
+  book   Book   @relation(fields: [bookId], references: [id], onDelete: Cascade)
+  file   File   @relation(fields: [fileId], references: [id], onDelete: Cascade)
+
+  @@id([bookId, fileId])
+  @@map("book_files")
+}
