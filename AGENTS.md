@@ -1,46 +1,52 @@
 # AGENTS.md
 
-## Commands
+## Commands (run from repo root)
 
 ```sh
-pnpm build          # builds all packages via turborepo
-pnpm dev            # runs all dev servers
+pnpm build                      # turbo build — all packages
+pnpm dev                        # turbo dev — all dev servers (dependsOn ^build)
+
+pnpm --filter bigbrother dev    # nest start --watch (port 3000)
+pnpm --filter bigbrother build  # nest build → dist/
+pnpm --filter bigbrother start  # node dist/main
+pnpm --filter bigbrother lint   # eslint
+pnpm --filter bigbrother test   # jest (src/**/*.spec.ts)
+pnpm --filter bigbrother test:e2e   # jest --config test/jest-e2e.json
+pnpm --filter bigbrother db:migrate # prisma migrate dev
+pnpm --filter bigbrother db:studio  # prisma studio
+
+pnpm --filter doublethink dev   # vite HMR
+pnpm --filter doublethink build # tsc -b && vite build
+pnpm --filter doublethink lint  # eslint
 ```
 
-Per-package (run from repo root):
-```sh
-pnpm --filter bigbrother dev        # tsup watch + node dist/server.js
-pnpm --filter bigbrother build      # tsup → dist/
-pnpm --filter bigbrother start      # node dist/server.js
-
-pnpm --filter doublethink dev       # vite HMR
-pnpm --filter doublethink build     # tsc -b && vite build
-pnpm --filter doublethink lint      # eslint
-```
+`postinstall` runs `prisma generate` (bigbrother). Start DB first: `docker-compose up -d`.
 
 ## Architecture
 
-- **bigbrother** — Express 5 API backend. Entry: `apps/bigbrother/src/server.ts`. Port 3000.
-- **doublethink** — React 19 frontend. Entry: `apps/doublethink/src/main.tsx`.
-- **@orwell/shared** — Shared TypeScript interfaces (`Book`, `File`, `BookFile`). Imported directly from source — no build step required.
+- **bigbrother** — NestJS 11 API backend. Entry: `apps/bigbrother/src/main.ts`. Port 3000, global `/api` prefix, CORS enabled, `ValidationPipe({ transform: true, whitelist: true })`.
+  - `AppModule` imports `ConfigModule.forRoot({ isGlobal: true })`, `PrismaModule` (`@Global()`), `BooksModule`.
+  - `PrismaService` extends `PrismaClient` with lifecycle connect/disconnect.
+  - `BooksController` exposes `GET /api/books`, `POST /api/book` (multipart file upload via Multer to `BOOKS_PATH`).
+  - Uses `@nestjs/cli` (not tsup). Config: `nest-cli.json`, tsconfig `module: "nodenext"`, CJS (no `"type": "module"`).
 
-PostgreSQL 17 via `docker-compose up -d`. Credentials: `orwell/orwell/orwell`. DB at `localhost:5432`.
+- **doublethink** — React 19 + Vite + Tailwind CSS 4 + React Router 7 + TanStack React Query 5. Entry: `apps/doublethink/src/main.tsx`.
+  - Hardcodes API URL `http://localhost:3000/api/books` (no Vite proxy). Routes in `App.tsx`.
 
-## Critical Gotchas
+- **@orwell/shared** — TypeScript interfaces (`Book`, `File`, `BookFile`). ESM, consumed directly from `packages/shared/src/index.ts` via `paths` in root `tsconfig.json` — no build step.
 
-- **ESM throughout** — all packages have `"type": "module"`. bigbrother uses `"module": "NodeNext"` which **requires `.js` extensions** on all local imports (not `.ts`).
-- **bigbrother uses `tsup`**, not `tsc` directly, for building. Config: `apps/bigbrother/tsup.config.ts`. `@orwell/shared` is bundled via `noExternal`.
-- **Strict TypeScript in bigbrother**: `noUncheckedIndexedAccess`, `exactOptionalPropertyTypes`, `noUnusedLocals`, `noUnusedParameters`, `verbatimModuleSyntax`. These will catch errors the frontend won't.
-- **No tests exist** in this repo yet. Do not try to run test commands.
+- **Prisma** (`apps/bigbrother/prisma/schema.prisma`): `Book`, `File`, `BookFile` models. UUIDs via `gen_random_uuid()`. DB: PostgreSQL 17 (`docker-compose up -d`, `orwell/orwell/orwell`, port 5432).
 
-## Env Config
+## Environment
 
-Backend env lives in `apps/bigbrother/.env` (gitignored). Key vars:
-- `BOOKS_PATH` — local path for book assets (default `./assets/books`)
-- `DATABASE_URL` — postgres connection string
+Backend env at `apps/bigbrother/.env` (gitignored):
+- `DATABASE_URL` — `postgresql://orwell:orwell@localhost:5432/orwell`
 - `PORT` — default `3000`
+- `BOOKS_PATH` — default `./assets/books`
 
-## Style Notes
+## Gotchas
 
-- bigbrother tsconfig enforces `noUnusedLocals` and `noUnusedParameters` — dead code will fail compilation.
-- doublethink uses default Vite + React plugin setup, no path aliases or custom config.
+- **bigbrother is CJS** (no `"type": "module"`). Only `doublethink` and `shared` are ESM (`"type": "module"`). Do **not** add `.js` extensions to bigbrother local imports.
+- **No tests exist yet** — `*.spec.ts` files and test directory hover empty. Do not try to run tests.
+- **prisma generate runs on postinstall** — if you change `schema.prisma`, run `pnpm --filter bigbrother db:migrate` (dev) or `pnpm --filter bigbrother exec prisma generate` manually.
+- `@nestjs/core`, `@prisma/client`, `@prisma/engines`, `prisma`, `esbuild`, `@swc/core` require `onlyBuiltDependencies` / `allowBuilds` in `pnpm-workspace.yaml`.
